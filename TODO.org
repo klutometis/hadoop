@@ -1,0 +1,133 @@
+* TODO hadoop-streaming abstraction
+  This might requires some =fs= abstractions, too; to delete e.g.
+  output directories.
+
+  Maybe a =hadoop= macro that simply passes the elements through?
+  E.g.:
+
+  #+BEGIN_SRC scheme
+    (hadoop fs -ls ,directory)
+  #+END_SRC
+
+  Maybe we can think of some abstractions later. See [[http://hadoop.apache.org/docs/r1.1.2/streaming.html#Streaming%2BCommand%2BOptions][streaming
+  options]].
+
+  #+BEGIN_SRC scheme
+    ;;; Use some heuristic to find this; possible involving $HADOOP_HOME
+    ;;; and a glob such as "contrib/streaming/*.jar"?
+    (define streaming-jar (make-parameter #f))
+    
+    (define (streaming #!optional options))
+  #+END_SRC
+
+  Create some kind of job record which takes a scalar or a list (for
+  e.g. =file=, which takes multiple invocations); or simply have a
+  quasi-quoted macro which converts e.g. keywords into dash-prefixed
+  parameters? A =hadoop-{fs,namenode,fsck,job,queue,version,&c.}=
+  which do a little of that for you?
+
+  #+BEGIN_SRC scheme
+    ;;; Dash things:
+    (hadoop fs -ls /)
+    
+    ;;; Keywords:
+    (hadoop fs ls: /)
+    (hadoop fs #:ls /)
+    
+    ;;; Also, which doesn't actually do jack shit:
+    (hadoop-fs ls: /)
+  #+END_SRC
+
+  This is going to be a trivial wrapper that could just as well be
+  accomplished from e.g. shell.
+
+  Is there any way to do something more interesting, such as compiling
+  lambdas; making a streaming job look like functional map-reduce in
+  the sense that: we compile lambdas, emit objects as strings; emit
+  multiple values as something-(e.g.-tab)-delimited strings?
+
+  Can the values corresponding to options be either symbols or
+  strings? Why not? Quasi-quote the symbols, if necessary; build a
+  string for things like ~stream.map.output.field.separator=.~.
+
+  Mapper is either a symbol (e.g. Java class), string (e.g. path) or a
+  lambda: in which case, it gets compiled and the temporary file
+  included with =-file=.
+
+  It would be nice to use something like autocompile or another
+  memoization mechanism. Optimization.
+
+  Pluggable handlers for e.g. input, output; that do the compilation.
+  Otherwise, passthrough?
+
+  This is a beautiful use of the ~=>~ operator in =cond=, by the way;
+  from [[http://wiki.call-cc.org/eggref/4/kvlists][kvlists]]:
+
+  #+BEGIN_SRC scheme
+    (define (kvlist-ref kvlist key #!optional default)
+      (cond ((memq key kvlist) => cadr)
+            (else default)))
+  #+END_SRC
+
+  A useful case for the truthiness of non-false values.
+
+  Don’t have to use keywords, by the way, for key-value lists;
+
+  #+BEGIN_SRC scheme
+    (use kvlists)
+    
+    ;;; => (a b)
+    (kvlist-map values '(a 2 b 3))
+  #+END_SRC
+
+  #+BEGIN_SRC scheme
+    (hadoop fs :rmr "/books-output")
+    ;;; vs.
+    (hadoop fs -rmr /books-output)
+    
+    (hadoop jar ,(streaming-jar)
+            ;; This allows quasi-quote;
+            -D (mapred.reduce.tasks 2)
+            ;; or:
+            -D mapred.reduce.tasks=2
+            ;; or:
+            -D ,(format "mapred.reduce.tasks=~a" 2)
+            ;; or:
+            -D "mapred.reduce.tasks=2"
+            -input /books
+            -output /books-output
+            -mapper map
+            -reducer reduce
+            -file map
+            -file reduce)
+    
+    (hadoop-streaming
+     :D (mapred.reduce.tasks 2)
+     :input "/books"
+     :output "/books-output"
+     :mapper map
+     :reducer reduce)
+    
+  #+END_SRC
+
+  Can the general =hadoop= macro do the lambda magic? It’s
+  streaming-specific, though.
+
+  The other thing is that we can do a procedure-predicate, but how do
+  we make sure that procedure is in the scope of the compiled code?
+  It’s easy with e.g. a self-contained =lambda=, isn’t it? Damn, we
+  almost need an entire document with =use= statements, &c. In that
+  case: a string that corresponds to a =.scm= file: compile and
+  include? How do we specify compilation flags?
+
+  Do we say: fuck it, the streaming interface is for one-off lambdas?
+
+  This can be used to intersperse string-representations with e.g.
+  tab, by the way:
+
+  #+BEGIN_SRC scheme
+    (use test)
+    
+    (call-with-values (lambda () (values 4 5))
+      (lambda x (test x '(4 5))))
+  #+END_SRC
