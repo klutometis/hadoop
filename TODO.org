@@ -1,3 +1,86 @@
+* TODO Compiling
+  See e.g. [[http://api.call-cc.org/doc/utils#def:compile-file][compile-file]]; can we hijack this to make executables?
+
+  #+BEGIN_SRC scheme :tangle compile-test.scm
+    (display 'harro)  
+  #+END_SRC
+
+  The resultant file will generate a segfault (since it
+  unconditionally gives =-s= to =csc=):
+
+  #+BEGIN_SRC scheme :tangle compile-file-test.scm :shebang #!/usr/bin/env chicken-scheme
+    (use utils)
+    (compile-file "compile-test.scm")
+  #+END_SRC
+
+  See e.g.:
+
+  #+BEGIN_SRC scheme
+    (define compile-file
+      (let ((csc (foreign-value "C_CSC_PROGRAM" c-string))
+        (load-file load)
+        (path (foreign-value "C_INSTALL_BIN_HOME" c-string)) )
+        (lambda (filename #!key options output-file (load #t) verbose)
+          (let* ((cscpath (or (file-exists? (make-pathname path csc)) "csc"))
+             (tmpfile (and (not output-file) (create-temporary-file "so")))
+             (crapshell (eq? (build-platform) 'mingw32))
+             (cmd (sprintf "~a~a -s ~a ~a -o ~a~a" 
+                (if crapshell "\"" "")
+                (qs cscpath)
+                (string-intersperse
+                 (or options
+                 (compile-file-options)))
+                (qs filename)
+                (qs (or output-file tmpfile))
+                (if crapshell "\"" ""))))
+        (when verbose (print "  " cmd))
+        (let ((status (system cmd)))
+          (cond ((zero? status)
+             (unless output-file 
+               (on-exit
+                (lambda ()
+                  (handle-exceptions ex #f (delete-file* tmpfile)))))
+             (when load
+               (let ((f (or output-file tmpfile)))
+                 (handle-exceptions ex
+                 (begin
+                   (delete-file* f)
+                   (abort ex))
+                   (load-file f)
+                   f))))
+            (else #f)))))))
+  #+END_SRC
+
+  On the other hand:
+
+  #+BEGIN_SRC scheme
+    (use setup-api)
+    (compile "compile-test.scm")
+    (run ("compile-test"))
+  #+END_SRC
+
+  Bingo? That way, we can compile arbitrary shit. So, I think we have
+  the =lambda= covered. (We’ll embed it in some kind of application
+  that parses input line-by-line: =streaming-lambda=? Would be nice to
+  have some matchable stuff in there to unpack the line and assign it
+  to vars. Maybe that’s for the application to decide.)
+
+  We have the stand-alone file covered (pass it to =compile= via
+  =setup-api=).
+
+  Not sure how to deal with locally defined functions that are out of
+  scope; we can’t? Either self-contained =lambdas= . . . no, not
+  self-contained: even =lambdas= need compiler options. Maybe the
+  =streaming-lambda= takes compilation options? That’s somewhat
+  interesting: we can do =-X=, =-prelude=, =-postlude=, even
+  =-prologue= and =-epilogue=; no to mention =-R=.
+
+  Also, is it possible to run hadoop-streaming in some kind of debug
+  mode so we can see what sort of errors emerge? As in: =stdin=,
+  =stdout=.
+
+  The alternative to lambda is to write the procedure elsewhere and
+  use =-prologue=, &c.; write a library and use =-R=.
 * TODO hadoop-streaming abstraction
   This might requires some =fs= abstractions, too; to delete e.g.
   output directories.
