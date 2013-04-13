@@ -81,6 +81,49 @@
 
   The alternative to lambda is to write the procedure elsewhere and
   use =-prologue=, &c.; write a library and use =-R=.
+
+  Reduce the key-value pairs in the hadoop form; with special
+  reducers in the case of mapper and reducer, keeping it simple at
+  first. Let’s just do a pass-through proof of concept, then on to
+  the lambda-compile, &c. =streaming-jar= parameter, &c.
+
+  #+BEGIN_SRC scheme :comments link :tangle hadoop-test.scm :shebang #!/usr/bin/env chicken-scheme
+  (use shell)
+
+  (define-syntax hadoop
+    (syntax-rules ()
+      ((_ exp ...)
+       (run (hadoop exp ...)))))
+
+  (hadoop fs -ls /)
+  #+END_SRC
+
+  =hadoop= is nothing more than =(run (hadoop ...))=, by the way, much
+  like =(compile ...)= is =(run (compile ...))=.
+
+  See, for instance:
+
+  #+BEGIN_SRC scheme
+    (define (execute explist)
+      (define (smooth lst)
+        (let ((slst (map ->string lst)))
+          (string-intersperse (cons (fixpath (car slst)) (cdr slst)) " ") ) )
+      (for-each
+       (lambda (cmd)
+         (when (run-verbose) (printf "  ~A~%~!" cmd))
+         ($system cmd))
+       (map smooth explist) ) )
+    
+    (define-syntax run
+      (syntax-rules ()
+        ((_ exp ...)
+         (execute (list `exp ...)))))
+    
+    (define-syntax compile
+      (syntax-rules ()
+        ((_ exp ...)
+         (run (csc exp ...)))))
+  #+END_SRC
 * TODO hadoop-streaming abstraction
   This might requires some =fs= abstractions, too; to delete e.g.
   output directories.
