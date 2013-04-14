@@ -124,6 +124,30 @@
         ((_ exp ...)
          (run (csc exp ...)))))
   #+END_SRC
+
+  There is no =kvlist-reduce=, alas; need to make an ad-hoc one?
+
+  #+BEGIN_SRC scheme
+    (use debug
+         kvlists)
+    
+    (define (kvlists-fold cons nil kvlist)
+      (fold (lambda (key-value accumulatum)
+              (cons (car key-value) (cadr key-value) accumulatum))
+            nil
+            (chop kvlist 2)))
+    
+    (define (kvlists-fold cons nil kvlist)
+      (fold (lambda (kv a) (cons (car kv) (cadr kv) a))
+            nil
+            (chop kvlist 2)))
+    
+    (kvlists-fold (lambda (k v a)
+                    (debug k v a)
+                    (cons k (cons v a)))
+                  '()
+                  '(harro: freunds oh: jeah))
+  #+END_SRC
 * TODO hadoop-streaming abstraction
   This might requires some =fs= abstractions, too; to delete e.g.
   output directories.
